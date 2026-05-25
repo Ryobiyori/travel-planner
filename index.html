@@ -1,0 +1,869 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#FDFBF7">
+<title>旅途手帖 — AI 行程規劃</title>
+<link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/5246/5246717.png">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js"></script>
+<script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@400;500;700;800&family=Noto+Sans+TC:wght@300;400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+<style>
+:root {
+  --red: #9A2B2B; --gold: #C7A252; --ink: #2B2B2B; --paper: #FDFBF7;
+  --gray: #888; --muted: #bbb; --white: #fff;
+  --card-bg: rgba(255,255,255,0.92);
+  --border: rgba(199,162,82,0.3);
+}
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+body { font-family: 'Noto Sans TC', sans-serif; background: var(--paper); color: var(--ink); margin: 0; overflow-x: hidden; }
+.serif { font-family: 'Shippori Mincho', serif; }
+
+/* BG */
+.bg-dots { position: fixed; inset: 0; z-index: -2; background-image: radial-gradient(#E5E5E5 1px, transparent 1px); background-size: 20px 20px; }
+.fuji { position: fixed; bottom: 0; right: -10px; width: 240px; height: 180px; z-index: -1; pointer-events: none; opacity: 0.1; background: url('https://cdn.pixabay.com/photo/2022/03/08/19/50/mount-fuji-7056379_1280.png') bottom right/contain no-repeat; filter: sepia(1) hue-rotate(320deg); }
+
+/* SPLASH */
+#splash { position: fixed; inset: 0; background: var(--paper); z-index: 9999; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; transition: opacity 0.6s; }
+#splash.fade { opacity: 0; pointer-events: none; }
+.splash-title { font-family: 'Shippori Mincho', serif; font-size: 2.2rem; font-weight: 800; color: var(--red); letter-spacing: 0.15em; }
+.splash-sub { font-size: 0.85rem; color: var(--gray); letter-spacing: 0.2em; }
+.splash-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--gold); animation: pulse 1.2s ease-in-out infinite; }
+@keyframes pulse { 0%,100%{opacity:0.3;transform:scale(0.8)} 50%{opacity:1;transform:scale(1.2)} }
+
+/* APP */
+#app { max-width: 480px; margin: 0 auto; min-height: 100vh; padding-bottom: 120px; }
+[v-cloak] { display: none; }
+
+/* HEADER */
+.header { position: relative; z-index: 10; background: var(--paper); }
+.header-img { width: 100%; height: 160px; object-fit: cover; opacity: 0.75; display: block; transition: opacity 0.5s; }
+.header-gradient { position: absolute; bottom: 0; left: 0; right: 0; height: 100px; background: linear-gradient(to bottom, transparent, var(--paper)); }
+.header-body { padding: 0 20px 16px; }
+.trip-name-row { display: flex; align-items: center; gap: 8px; margin-top: -8px; }
+.trip-name-input { font-family: 'Shippori Mincho', serif; font-size: 1.6rem; font-weight: 800; color: var(--ink); background: transparent; border: none; outline: none; flex: 1; min-width: 0; }
+.trip-name-input::placeholder { color: var(--muted); }
+.header-meta { font-size: 0.75rem; color: var(--gray); letter-spacing: 0.15em; margin-top: 4px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.weather-pill { display: flex; align-items: center; gap: 4px; background: rgba(255,255,255,0.8); border: 1px solid var(--border); padding: 2px 8px; border-radius: 20px; font-size: 0.75rem; }
+
+/* DAY TABS */
+.day-tabs { display: flex; gap: 8px; overflow-x: auto; padding: 0 20px 4px; scrollbar-width: none; margin-top: 12px; }
+.day-tabs::-webkit-scrollbar { display: none; }
+.day-tab { flex-shrink: 0; width: 52px; height: 60px; border: 1px solid rgba(136,136,136,0.25); border-radius: 6px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; cursor: pointer; transition: all 0.2s; background: var(--white); color: var(--gray); }
+.day-tab.active { background: var(--red); color: white; border-color: var(--red); }
+.day-tab span:first-child { font-size: 9px; letter-spacing: 0.05em; }
+.day-tab span:last-child { font-size: 11px; font-weight: 700; }
+.day-tab-add { flex-shrink: 0; width: 52px; height: 60px; border: 1px dashed var(--gold); border-radius: 6px; display: flex; align-items: center; justify-content: center; cursor: pointer; color: var(--gold); font-size: 1.4rem; transition: all 0.2s; background: transparent; }
+.day-tab-add:hover { background: rgba(199,162,82,0.08); }
+
+/* CONTROLS */
+.controls { padding: 12px 20px; display: flex; justify-content: space-between; align-items: center; }
+.btn-ai { display: flex; align-items: center; gap: 6px; background: var(--red); color: white; border: none; padding: 8px 16px; border-radius: 6px; font-size: 0.8rem; font-weight: 700; cursor: pointer; letter-spacing: 0.05em; transition: opacity 0.2s; }
+.btn-ai:hover { opacity: 0.88; }
+.btn-ai:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-ghost { background: transparent; border: 1px solid rgba(136,136,136,0.3); color: var(--gray); padding: 6px 12px; border-radius: 6px; font-size: 0.75rem; cursor: pointer; }
+
+/* AI INPUT */
+.ai-panel { margin: 0 20px 16px; background: rgba(255,255,255,0.9); border: 1px solid var(--border); border-radius: 8px; padding: 14px; }
+.ai-panel-title { font-size: 0.75rem; font-weight: 700; color: var(--gold); letter-spacing: 0.1em; margin-bottom: 10px; display: flex; align-items: center; gap: 6px; }
+.ai-input { width: 100%; border: none; border-bottom: 1px solid var(--border); background: transparent; padding: 6px 0; font-family: 'Noto Sans TC'; font-size: 0.9rem; color: var(--ink); outline: none; margin-bottom: 8px; }
+.ai-input::placeholder { color: var(--muted); }
+.ai-row { display: flex; gap: 8px; }
+.ai-row input { flex: 1; }
+.btn-generate { width: 100%; background: var(--ink); color: white; border: none; padding: 10px; border-radius: 6px; font-size: 0.85rem; font-weight: 700; cursor: pointer; margin-top: 8px; transition: background 0.2s; display: flex; align-items: center; justify-content: center; gap: 8px; }
+.btn-generate:hover { background: var(--red); }
+.btn-generate:disabled { opacity: 0.5; cursor: not-allowed; }
+.ai-status { font-size: 0.75rem; color: var(--gray); margin-top: 8px; text-align: center; min-height: 16px; }
+.ai-status.loading { color: var(--gold); }
+
+/* DAY HEADER */
+.day-header { padding: 4px 20px 8px; display: flex; justify-content: space-between; align-items: center; }
+.day-title { font-family: 'Shippori Mincho', serif; font-size: 1.1rem; font-weight: 700; color: var(--ink); }
+.day-total { font-size: 0.8rem; color: var(--red); font-weight: 700; }
+
+/* ITEMS */
+.items-wrap { padding: 0 16px; position: relative; }
+.red-line { position: absolute; left: 40px; top: 0; bottom: 0; width: 1px; background: var(--red); opacity: 0.25; pointer-events: none; }
+.item-row { display: flex; align-items: flex-start; margin-bottom: 18px; position: relative; }
+.drag-handle { width: 24px; height: 40px; display: flex; align-items: center; justify-content: center; color: var(--gold); cursor: grab; font-size: 0.9rem; flex-shrink: 0; touch-action: none; margin-top: 10px; }
+.item-dot { position: absolute; left: 18px; top: 18px; width: 10px; height: 10px; background: var(--red); border-radius: 50%; border: 2px solid var(--paper); z-index: 5; flex-shrink: 0; }
+.item-card { flex: 1; background: var(--card-bg); border-left: 3px solid var(--red); border-radius: 0 6px 6px 0; padding: 12px 14px; box-shadow: 2px 3px 10px rgba(0,0,0,0.05); cursor: pointer; transition: transform 0.1s; position: relative; }
+.item-card:active { transform: scale(0.99); }
+.item-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px solid rgba(0,0,0,0.05); }
+.item-time { font-size: 1rem; font-weight: 700; color: var(--ink); font-family: 'Shippori Mincho', serif; }
+.item-expense-btn { font-size: 0.7rem; font-weight: 700; border: 1px solid var(--red); color: var(--red); padding: 2px 8px; border-radius: 4px; cursor: pointer; background: transparent; white-space: nowrap; transition: all 0.15s; }
+.item-expense-btn:hover { background: var(--red); color: white; }
+.item-title { font-size: 1rem; font-weight: 700; color: var(--ink); margin-bottom: 4px; }
+.item-desc { font-size: 0.8rem; color: var(--gray); line-height: 1.6; white-space: pre-line; margin-bottom: 6px; }
+.item-links { display: flex; flex-wrap: wrap; gap: 8px; }
+.item-link { font-size: 0.75rem; color: #2563eb; border-bottom: 1px solid rgba(37,99,235,0.3); cursor: pointer; }
+.item-link.map { color: var(--gold); border-color: rgba(199,162,82,0.4); }
+.item-img { margin-top: 10px; height: 120px; width: 100%; object-fit: cover; border-radius: 4px; filter: grayscale(0.3); transition: filter 0.5s; }
+.item-img:hover { filter: none; }
+
+/* TYPE TAGS */
+.tag { font-size: 0.65rem; padding: 2px 6px; border-radius: 3px; font-weight: 700; color: white; display: inline-block; }
+.t-transit { background: #607D8B; } .t-shopping { background: #E91E63; } .t-hotel { background: #795548; }
+.t-spot { background: #7B1FA2; } .t-onsen { background: #FF5722; } .t-shrine { background: #C2185B; }
+.t-flexible { background: #009688; } .t-lunch { background: #F57F17; } .t-dinner { background: #1A237E; }
+.t-default { background: #9E9E9E; }
+
+/* FAB */
+.fab { position: fixed; bottom: 100px; right: 20px; width: 56px; height: 56px; background: var(--red); color: white; border-radius: 50%; box-shadow: 0 4px 14px rgba(154,43,43,0.4); z-index: 80; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; cursor: pointer; transition: transform 0.15s; border: none; }
+.fab:active { transform: scale(0.9); }
+
+/* BOTTOM BAR */
+.bottom-bar { position: fixed; bottom: 0; left: 0; right: 0; background: rgba(253,251,247,0.96); backdrop-filter: blur(10px); border-top: 1px solid var(--border); padding: 12px 24px 20px; z-index: 50; }
+.bottom-inner { max-width: 480px; margin: 0 auto; display: flex; justify-content: space-between; align-items: center; }
+.bottom-label { font-size: 9px; color: var(--gray); letter-spacing: 0.15em; text-transform: uppercase; }
+.bottom-amount { font-family: 'Shippori Mincho', serif; font-size: 1.6rem; font-weight: 700; color: var(--red); }
+
+/* MODALS */
+.overlay { position: fixed; inset: 0; background: rgba(43,43,43,0.75); z-index: 200; display: flex; align-items: flex-end; justify-content: center; backdrop-filter: blur(2px); }
+.modal { background: var(--paper); width: 100%; max-width: 480px; border-radius: 16px 16px 0 0; padding: 20px; max-height: 85vh; overflow-y: auto; }
+.modal-handle { width: 40px; height: 4px; background: var(--muted); border-radius: 2px; margin: 0 auto 16px; }
+.modal-title { font-family: 'Shippori Mincho', serif; font-size: 1.1rem; font-weight: 700; margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center; }
+.field-label { font-size: 0.7rem; color: var(--gray); letter-spacing: 0.1em; margin-bottom: 4px; }
+.field-input { width: 100%; border: none; border-bottom: 1px solid var(--border); background: transparent; padding: 6px 0; font-family: 'Noto Sans TC'; font-size: 0.9rem; color: var(--ink); outline: none; margin-bottom: 12px; }
+.field-input:focus { border-bottom-color: var(--red); }
+.field-row { display: flex; gap: 12px; }
+.field-row > div { flex: 1; }
+.btn-save { width: 100%; background: var(--ink); color: white; border: none; padding: 12px; border-radius: 6px; font-size: 0.9rem; font-weight: 700; cursor: pointer; margin-top: 8px; transition: background 0.2s; }
+.btn-save:hover { background: var(--red); }
+.btn-delete { font-size: 0.75rem; color: #dc2626; border: 1px solid #fca5a5; padding: 4px 10px; border-radius: 4px; cursor: pointer; background: transparent; }
+
+/* EXPENSE MODAL */
+.expense-list { max-height: 180px; overflow-y: auto; margin-bottom: 16px; }
+.expense-row { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px dashed rgba(0,0,0,0.07); font-size: 0.85rem; }
+.expense-label-col { display: flex; flex-direction: column; gap: 2px; }
+.expense-meta { font-size: 0.65rem; color: var(--gray); display: flex; gap: 6px; }
+.expense-amount { font-weight: 700; color: var(--ink); margin-right: 8px; }
+.btn-rm { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 0.9rem; padding: 0 4px; }
+.btn-rm:hover { color: var(--red); }
+.expense-add { background: rgba(0,0,0,0.03); border-radius: 8px; padding: 12px; }
+.expense-total { display: flex; justify-content: space-between; align-items: center; border-top: 1px solid var(--ink); padding-top: 12px; margin-top: 8px; }
+.expense-total-label { font-size: 0.8rem; color: var(--gray); font-weight: 700; }
+.expense-total-amount { font-family: 'Shippori Mincho', serif; font-size: 1.4rem; font-weight: 700; color: var(--red); }
+
+/* MEMBER MODAL */
+.member-chip { display: flex; align-items: center; gap: 6px; background: #EFEBE9; border: 1px solid #D7CCC8; padding: 4px 10px; border-radius: 20px; font-size: 0.85rem; }
+.split-result { background: rgba(0,0,0,0.03); border-radius: 8px; padding: 12px; font-size: 0.8rem; margin-top: 12px; }
+.split-row { display: flex; justify-content: space-between; padding: 3px 0; }
+.split-row.owe { color: #dc2626; }
+.split-row.recv { color: #16a34a; }
+
+/* EMPTY STATE */
+.empty { text-align: center; padding: 40px 20px; color: var(--muted); }
+.empty-icon { font-size: 2.5rem; margin-bottom: 12px; opacity: 0.5; }
+.empty-text { font-size: 0.85rem; line-height: 1.8; }
+
+/* NOTIF TOAST */
+.toast { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); background: var(--ink); color: white; padding: 10px 20px; border-radius: 20px; font-size: 0.8rem; z-index: 9999; transition: opacity 0.3s; white-space: nowrap; }
+.toast.hidden { opacity: 0; pointer-events: none; }
+
+/* SETTINGS MODAL */
+.settings-section { margin-bottom: 16px; }
+.settings-label { font-size: 0.7rem; color: var(--gray); letter-spacing: 0.1em; margin-bottom: 8px; }
+.color-pick { display: flex; gap: 8px; flex-wrap: wrap; }
+.color-swatch { width: 28px; height: 28px; border-radius: 50%; cursor: pointer; border: 3px solid transparent; transition: border 0.2s; }
+.color-swatch.selected { border-color: var(--ink); }
+.img-presets { display: grid; grid-template-columns: repeat(3,1fr); gap: 6px; }
+.img-preset { height: 60px; border-radius: 6px; object-fit: cover; cursor: pointer; border: 2px solid transparent; transition: border 0.2s; opacity: 0.8; }
+.img-preset.selected { border-color: var(--red); opacity: 1; }
+
+textarea.field-input { resize: vertical; height: 72px; }
+
+@media (min-width: 480px) { #app { padding-bottom: 130px; } }
+</style>
+</head>
+<body>
+<div id="splash">
+  <div class="serif splash-title">旅途手帖</div>
+  <div class="splash-sub">AI TRAVEL PLANNER</div>
+  <div style="display:flex;gap:8px;margin-top:8px;">
+    <div class="splash-dot" style="animation-delay:0s"></div>
+    <div class="splash-dot" style="animation-delay:0.2s"></div>
+    <div class="splash-dot" style="animation-delay:0.4s"></div>
+  </div>
+</div>
+
+<div id="app" v-cloak>
+  <div class="bg-dots"></div>
+  <div class="fuji"></div>
+  <div class="toast" :class="{ hidden: !toastVisible }">{{ toastMsg }}</div>
+
+  <!-- HEADER -->
+  <header class="header">
+    <div style="position:relative;">
+      <img :src="headerImg" class="header-img" alt="cover">
+      <div class="header-gradient"></div>
+    </div>
+    <div class="header-body">
+      <div class="trip-name-row">
+        <input v-model="tripName" class="trip-name-input serif" placeholder="我的旅程名稱">
+        <button @click="showSettings=true" style="background:none;border:none;cursor:pointer;color:var(--gold);font-size:1.1rem;padding:4px;"><i class="fa-solid fa-sliders"></i></button>
+        <button @click="showMemberModal=true" style="background:none;border:none;cursor:pointer;color:var(--gray);font-size:1rem;padding:4px;"><i class="fa-solid fa-users"></i></button>
+      </div>
+      <div class="header-meta">
+        <span>{{ tripStartDate || '設定出發日期' }}</span>
+        <span v-if="tripDays.length > 0">共 {{ tripDays.length }} 天</span>
+        <div class="weather-pill" v-if="!weatherLoading">
+          <i :class="weatherIcon" class="fa-solid"></i>
+          <span>{{ currentTemp !== '--' ? currentTemp + '°C' : '...' }}</span>
+        </div>
+      </div>
+
+      <!-- DAY TABS -->
+      <div class="day-tabs" style="margin-top:12px;">
+        <div v-for="(day, idx) in tripDays" :key="idx"
+          class="day-tab" :class="{ active: currentDayIdx === idx }"
+          @click="changeDay(idx)">
+          <span>Day {{ idx + 1 }}</span>
+          <span>{{ formatTabDate(day.date) }}</span>
+        </div>
+        <div class="day-tab-add" @click="addDay" title="新增天數">＋</div>
+      </div>
+    </div>
+  </header>
+
+  <!-- CONTROLS -->
+  <div class="controls">
+    <button class="btn-ai" @click="showAiPanel = !showAiPanel">
+      <i class="fa-solid fa-wand-magic-sparkles"></i>
+      AI 規劃行程
+    </button>
+    <div style="display:flex;gap:8px;">
+      <button class="btn-ghost" @click="exportTrip"><i class="fa-solid fa-download"></i></button>
+      <button class="btn-ghost" @click="triggerImport"><i class="fa-solid fa-upload"></i></button>
+      <input type="file" accept=".json" @change="importTrip" ref="importInput" style="display:none">
+    </div>
+  </div>
+
+  <!-- AI PANEL -->
+  <div class="ai-panel" v-if="showAiPanel">
+    <div class="ai-panel-title"><i class="fa-solid fa-sparkles"></i> AI 幫你規劃今天行程</div>
+    <div class="ai-row">
+      <div>
+        <div class="field-label">目的地</div>
+        <input v-model="aiCity" class="ai-input" placeholder="例：京都、東京新宿、大阪道頓堀">
+      </div>
+      <div>
+        <div class="field-label">風格 (可空白)</div>
+        <input v-model="aiStyle" class="ai-input" placeholder="文青/美食/購物/神社...">
+      </div>
+    </div>
+    <div class="field-label">特別需求</div>
+    <input v-model="aiExtra" class="ai-input" placeholder="例：有小孩、預算省、必去景點...">
+    <button class="btn-generate" @click="generateAI" :disabled="aiLoading">
+      <i class="fa-solid fa-robot"></i>
+      {{ aiLoading ? 'AI 生成中...' : '生成今日行程' }}
+    </button>
+    <div class="ai-status" :class="{ loading: aiLoading }">{{ aiStatus }}</div>
+  </div>
+
+  <!-- DAY CONTENT -->
+  <div v-if="tripDays.length === 0" class="empty">
+    <div class="empty-icon">🗺️</div>
+    <div class="empty-text">還沒有行程<br>點上方「AI 規劃行程」或「＋」新增天數</div>
+  </div>
+
+  <template v-if="currentDay">
+    <!-- DAY HEADER -->
+    <div class="day-header">
+      <div>
+        <input :value="currentDay.title" @input="currentDay.title = $event.target.value; saveData()"
+          style="font-family:'Shippori Mincho',serif;font-size:1rem;font-weight:700;border:none;background:transparent;outline:none;color:var(--ink);width:200px;"
+          placeholder="今日標題">
+        <div style="font-size:0.72rem;color:var(--gray);margin-top:2px;">{{ currentDay.date }}</div>
+      </div>
+      <div style="text-align:right;">
+        <div style="font-size:0.7rem;color:var(--gray);">今日消費</div>
+        <div class="day-total serif">¥ {{ dailyTotal.toLocaleString() }}</div>
+      </div>
+    </div>
+
+    <!-- ITEM LIST -->
+    <div class="items-wrap">
+      <div class="red-line"></div>
+      <div id="item-list">
+        <div v-for="(item, idx) in currentDay.items" :key="item.id" class="item-row" :data-id="item.id">
+          <div class="drag-handle"><i class="fa-solid fa-grip-vertical"></i></div>
+          <div class="item-dot"></div>
+          <div class="item-card" @click="openEdit(item)">
+            <div class="item-top">
+              <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+                <span class="item-time">{{ item.timeValue || '??:??' }}</span>
+                <span v-if="item.type" :class="['tag', typeClass(item.type)]">{{ typeName(item.type) }}</span>
+              </div>
+              <button class="item-expense-btn" @click.stop="openExpense(item)">
+                <i class="fa-solid fa-yen-sign"></i> {{ itemTotal(item).toLocaleString() }}
+              </button>
+            </div>
+            <div class="item-title">{{ item.title }}</div>
+            <div class="item-desc" v-if="item.desc">{{ item.desc }}</div>
+            <div class="item-links" v-if="item.mapUrl || (item.links && item.links.length)">
+              <span v-for="lk in (item.links||[])" :key="lk.text" class="item-link" @click.stop="openUrl(lk.url)">↗ {{ lk.text }}</span>
+              <span v-if="item.mapUrl" class="item-link map" @click.stop="openUrl(item.mapUrl)">📍 地圖</span>
+              <span v-else class="item-link map" @click.stop="searchMap(item.title)">🔍 搜尋</span>
+            </div>
+            <img v-if="item.image" :src="item.image" class="item-img" alt="">
+          </div>
+        </div>
+      </div>
+      <div v-if="!currentDay.items || currentDay.items.length === 0" class="empty">
+        <div class="empty-icon">✏️</div>
+        <div class="empty-text">今天還沒有行程<br>點「＋」新增，或使用 AI 一鍵生成</div>
+      </div>
+    </div>
+  </template>
+
+  <!-- FAB -->
+  <button class="fab" @click="addItem" title="新增行程"><i class="fa-solid fa-plus"></i></button>
+
+  <!-- BOTTOM BAR -->
+  <div class="bottom-bar">
+    <div class="bottom-inner">
+      <div>
+        <div class="bottom-label">Trip Total (全程)</div>
+        <div class="bottom-amount serif">¥ {{ tripTotal.toLocaleString() }}</div>
+      </div>
+      <div style="text-align:right;">
+        <div class="bottom-label">今日 Day {{ currentDayIdx + 1 }}</div>
+        <div style="font-size:0.85rem;font-weight:700;color:var(--ink);">¥ {{ dailyTotal.toLocaleString() }}</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- EDIT MODAL -->
+  <div class="overlay" v-if="showEdit" @click="closeEdit">
+    <div class="modal" @click.stop>
+      <div class="modal-handle"></div>
+      <div class="modal-title serif">
+        編輯行程
+        <button class="btn-delete" @click="deleteItem">刪除</button>
+      </div>
+      <template v-if="editItem">
+        <div class="field-row">
+          <div>
+            <div class="field-label">時間</div>
+            <input type="time" v-model="editItem.timeValue" class="field-input">
+          </div>
+          <div>
+            <div class="field-label">分類</div>
+            <select v-model="editItem.type" class="field-input">
+              <option value="">無</option>
+              <option value="lunch">午餐</option><option value="dinner">晚餐</option>
+              <option value="shopping">購物</option><option value="spot">景點</option>
+              <option value="shrine">神社寺廟</option><option value="hotel">旅館</option>
+              <option value="onsen">溫泉</option><option value="transit">交通</option>
+              <option value="flexible">彈性</option>
+            </select>
+          </div>
+        </div>
+        <div class="field-label">標題</div>
+        <input v-model="editItem.title" class="field-input" placeholder="地點名稱">
+        <div class="field-label">地圖連結</div>
+        <input v-model="editItem.mapUrl" class="field-input" placeholder="Google Maps URL">
+        <div class="field-label">備註</div>
+        <textarea v-model="editItem.desc" class="field-input" placeholder="備忘..."></textarea>
+        <div class="field-label">上傳圖片</div>
+        <input type="file" accept="image/*" @change="uploadImg" style="font-size:0.8rem;margin-bottom:12px;">
+        <button class="btn-save" @click="closeEdit">儲存</button>
+      </template>
+    </div>
+  </div>
+
+  <!-- EXPENSE MODAL -->
+  <div class="overlay" v-if="showExpense" @click="closeExpense">
+    <div class="modal" @click.stop>
+      <div class="modal-handle"></div>
+      <div class="modal-title serif">
+        消費明細
+        <span style="font-size:0.75rem;color:var(--gray);font-family:'Noto Sans TC';">{{ expenseItem && expenseItem.title }}</span>
+      </div>
+      <template v-if="expenseItem">
+        <div class="expense-list">
+          <div v-if="!expenseItem.expenses || expenseItem.expenses.length === 0" style="text-align:center;color:var(--muted);padding:16px;font-size:0.85rem;">尚無記錄</div>
+          <div v-for="(exp, idx) in expenseItem.expenses" :key="idx" class="expense-row">
+            <div class="expense-label-col">
+              <span style="font-weight:600;">{{ exp.label }}</span>
+              <div class="expense-meta">
+                <span v-if="exp.payer">{{ exp.payer }}</span>
+                <span :style="exp.method==='card'?'color:#2563eb':'color:#16a34a'">
+                  {{ exp.method === 'card' ? '💳 刷卡' : '💵 現金' }}
+                </span>
+              </div>
+            </div>
+            <div style="display:flex;align-items:center;">
+              <span class="expense-amount">¥ {{ Number(exp.amount).toLocaleString() }}</span>
+              <button class="btn-rm" @click="removeExp(idx)"><i class="fa-solid fa-times"></i></button>
+            </div>
+          </div>
+        </div>
+        <div class="expense-add">
+          <div class="field-row">
+            <div><div class="field-label">項目</div><input v-model="newExpLabel" class="field-input" placeholder="名稱"></div>
+            <div><div class="field-label">金額</div><input v-model.number="newExpAmount" type="number" class="field-input" placeholder="0"></div>
+          </div>
+          <div class="field-row">
+            <div>
+              <div class="field-label">付款</div>
+              <select v-model="newExpMethod" class="field-input"><option value="cash">現金</option><option value="card">信用卡</option></select>
+            </div>
+            <div>
+              <div class="field-label">墊付人</div>
+              <select v-model="newExpPayer" class="field-input"><option v-for="m in members" :key="m" :value="m">{{ m }}</option></select>
+            </div>
+          </div>
+          <button class="btn-save" @click="addExp">新增記錄</button>
+        </div>
+        <div class="expense-total">
+          <span class="expense-total-label">合計</span>
+          <span class="expense-total-amount serif">¥ {{ itemTotal(expenseItem).toLocaleString() }}</span>
+        </div>
+      </template>
+    </div>
+  </div>
+
+  <!-- MEMBER MODAL -->
+  <div class="overlay" v-if="showMemberModal" @click="showMemberModal=false">
+    <div class="modal" @click.stop>
+      <div class="modal-handle"></div>
+      <div class="modal-title serif">旅伴 & 分帳</div>
+      <div style="display:flex;gap:8px;margin-bottom:12px;">
+        <input v-model="newMember" class="field-input" placeholder="新增旅伴名字" style="flex:1;margin:0;" @keyup.enter="addMember">
+        <button class="btn-save" style="width:auto;padding:6px 14px;margin:0;" @click="addMember">加入</button>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px;">
+        <div v-for="(m, idx) in members" :key="idx" class="member-chip">
+          {{ m }}
+          <button @click="removeMember(idx)" style="background:none;border:none;color:#ef4444;cursor:pointer;padding:0 2px;" v-if="members.length > 1">×</button>
+        </div>
+      </div>
+      <div style="font-size:0.7rem;color:var(--gold);letter-spacing:0.1em;margin-bottom:8px;">分帳結果</div>
+      <div class="split-result">
+        <div class="split-row"><span>總費用</span><span style="font-weight:700;">¥ {{ splitResult.total.toLocaleString() }}</span></div>
+        <div class="split-row"><span>每人應付</span><span style="font-weight:700;">¥ {{ Math.round(splitResult.perPerson).toLocaleString() }}</span></div>
+        <div style="border-top:1px dashed rgba(0,0,0,0.1);margin:6px 0;"></div>
+        <div v-for="(status, name) in splitResult.balance" :key="name" class="split-row" :class="status < 0 ? 'owe' : 'recv'">
+          <span>{{ name }}</span>
+          <span style="font-weight:700;">{{ status < 0 ? '需再付' : '可收回' }} ¥{{ Math.abs(Math.round(status)).toLocaleString() }}</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SETTINGS MODAL -->
+  <div class="overlay" v-if="showSettings" @click="showSettings=false">
+    <div class="modal" @click.stop>
+      <div class="modal-handle"></div>
+      <div class="modal-title serif">旅程設定</div>
+      <div class="settings-section">
+        <div class="field-label">出發日期</div>
+        <input type="date" v-model="tripStartDate" class="field-input" @change="rebuildDates">
+      </div>
+      <div class="settings-section">
+        <div class="field-label">天數</div>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <button @click="setDayCount(Math.max(1, tripDays.length - 1))" style="width:32px;height:32px;border:1px solid var(--border);background:none;border-radius:4px;cursor:pointer;font-size:1.2rem;">−</button>
+          <span style="font-size:1.1rem;font-weight:700;min-width:32px;text-align:center;">{{ tripDays.length }}</span>
+          <button @click="setDayCount(tripDays.length + 1)" style="width:32px;height:32px;border:1px solid var(--border);background:none;border-radius:4px;cursor:pointer;font-size:1.2rem;">＋</button>
+        </div>
+      </div>
+      <div class="settings-section">
+        <div class="field-label">封面圖片</div>
+        <div class="img-presets">
+          <img v-for="url in headerPresets" :key="url" :src="url" class="img-preset" :class="{ selected: headerImg === url }" @click="headerImg = url; saveData();">
+        </div>
+        <input type="file" accept="image/*" @change="uploadHeader" style="font-size:0.75rem;margin-top:8px;">
+      </div>
+      <div class="settings-section">
+        <div class="field-label">幣別</div>
+        <select v-model="currency" class="field-input" style="width:auto;">
+          <option value="¥">日圓 ¥</option><option value="€">歐元 €</option>
+          <option value="$">美元 $</option><option value="₩">韓圜 ₩</option><option value="NT$">台幣 NT$</option>
+        </select>
+      </div>
+      <button class="btn-save" @click="showSettings=false;saveData()">儲存設定</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const { createApp, ref, computed, onMounted, watch, nextTick } = Vue;
+
+createApp({
+  setup() {
+    const STORE_KEY = 'ryoko_v2';
+    const tripName = ref('我的旅程');
+    const tripStartDate = ref('');
+    const tripDays = ref([]);
+    const currentDayIdx = ref(0);
+    const members = ref(['我']);
+    const newMember = ref('');
+    const currency = ref('¥');
+    const headerImg = ref('https://images.unsplash.com/photo-1492571350019-22de08371fd3?q=80&w=800&auto=format&fit=crop');
+    const headerPresets = [
+      'https://images.unsplash.com/photo-1492571350019-22de08371fd3?q=80&w=400',
+      'https://images.unsplash.com/photo-1540959733332-eab4deabeeaf?q=80&w=400',
+      'https://images.unsplash.com/photo-1528360983277-13d401cdc186?q=80&w=400',
+      'https://images.unsplash.com/photo-1524413840807-0c3cb6fa808d?q=80&w=400',
+      'https://images.unsplash.com/photo-1551641506-ee5bf4cb45f1?q=80&w=400',
+      'https://images.unsplash.com/photo-1536098561742-ca998e48cbcc?q=80&w=400',
+    ];
+
+    const showAiPanel = ref(false);
+    const showEdit = ref(false);
+    const showExpense = ref(false);
+    const showMemberModal = ref(false);
+    const showSettings = ref(false);
+    const editItem = ref(null);
+    const expenseItem = ref(null);
+    const aiCity = ref('');
+    const aiStyle = ref('');
+    const aiExtra = ref('');
+    const aiLoading = ref(false);
+    const aiStatus = ref('');
+    const weatherLoading = ref(false);
+    const currentTemp = ref('--');
+    const weatherCode = ref(0);
+    const toastVisible = ref(false);
+    const toastMsg = ref('');
+    const newExpLabel = ref('');
+    const newExpAmount = ref('');
+    const newExpMethod = ref('cash');
+    const newExpPayer = ref('');
+    const importInput = ref(null);
+
+    const currentDay = computed(() => tripDays.value[currentDayIdx.value] || null);
+    const dailyTotal = computed(() => {
+      if (!currentDay.value) return 0;
+      return (currentDay.value.items || []).reduce((s, i) => s + itemTotal(i), 0);
+    });
+    const tripTotal = computed(() => tripDays.value.reduce((s, d) => s + (d.items||[]).reduce((ss,i)=>ss+itemTotal(i),0), 0));
+
+    const weatherIcon = computed(() => {
+      const c = weatherCode.value;
+      if (c <= 1) return 'fa-sun text-orange-400';
+      if (c <= 3) return 'fa-cloud-sun';
+      if (c <= 67) return 'fa-cloud-rain';
+      if (c <= 77) return 'fa-snowflake';
+      return 'fa-cloud';
+    });
+
+    const splitResult = computed(() => {
+      let total = 0, paid = {};
+      members.value.forEach(m => paid[m] = 0);
+      tripDays.value.forEach(d => {
+        (d.items||[]).forEach(item => {
+          (item.expenses||[]).forEach(e => {
+            const amt = Number(e.amount) || 0;
+            total += amt;
+            const p = e.payer || members.value[0];
+            paid[p] = (paid[p] || 0) + amt;
+          });
+        });
+      });
+      const pp = members.value.length > 0 ? total / members.value.length : 0;
+      const balance = {};
+      members.value.forEach(m => balance[m] = (paid[m] || 0) - pp);
+      return { total, perPerson: pp, balance };
+    });
+
+    const itemTotal = (item) => (item.expenses||[]).reduce((s,e)=>s+(Number(e.amount)||0),0);
+
+    const typeClass = (t) => {
+      const m = { transit:'t-transit', shopping:'t-shopping', hotel:'t-hotel', spot:'t-spot', onsen:'t-onsen', shrine:'t-shrine', flexible:'t-flexible', lunch:'t-lunch', dinner:'t-dinner' };
+      return m[t] || 't-default';
+    };
+    const typeName = (t) => {
+      const m = { transit:'交通', shopping:'購物', hotel:'旅館', spot:'景點', onsen:'溫泉', shrine:'神社寺廟', flexible:'彈性', lunch:'午餐', dinner:'晚餐' };
+      return m[t] || t;
+    };
+
+    const formatTabDate = (dateStr) => {
+      if (!dateStr) return '';
+      const d = new Date(dateStr + 'T00:00:00');
+      return `${d.getMonth()+1}/${d.getDate()}`;
+    };
+
+    const makeDate = (startStr, offset) => {
+      if (!startStr) return '';
+      const d = new Date(startStr + 'T00:00:00');
+      d.setDate(d.getDate() + offset);
+      return d.toISOString().split('T')[0];
+    };
+
+    const addDay = () => {
+      const offset = tripDays.value.length;
+      tripDays.value.push({ title: `Day ${offset+1}`, date: makeDate(tripStartDate.value, offset), items: [] });
+      currentDayIdx.value = tripDays.value.length - 1;
+      saveData(); initSortable();
+    };
+
+    const setDayCount = (n) => {
+      if (n <= 0) return;
+      while (tripDays.value.length < n) addDay();
+      while (tripDays.value.length > n) tripDays.value.pop();
+      if (currentDayIdx.value >= tripDays.value.length) currentDayIdx.value = tripDays.value.length - 1;
+      saveData();
+    };
+
+    const rebuildDates = () => {
+      tripDays.value.forEach((d, i) => { d.date = makeDate(tripStartDate.value, i); });
+      saveData();
+    };
+
+    const changeDay = (idx) => {
+      currentDayIdx.value = idx;
+      if (currentDay.value) {
+        aiCity.value = currentDay.value.city || '';
+        fetchWeather(currentDay.value.lat, currentDay.value.lon);
+      }
+      nextTick(() => initSortable());
+    };
+
+    const addItem = () => {
+      if (!currentDay.value) { addDay(); return; }
+      const item = { id: Date.now(), timeValue: '12:00', title: '新行程', type: '', desc: '', mapUrl: '', links: [], expenses: [], image: '' };
+      currentDay.value.items.push(item);
+      saveData(); openEdit(item);
+    };
+
+    const openEdit = (item) => { editItem.value = item; showEdit.value = true; };
+    const closeEdit = () => { showEdit.value = false; editItem.value = null; saveData(); };
+
+    const deleteItem = () => {
+      if (!editItem.value || !currentDay.value) return;
+      if (confirm('確定刪除？')) {
+        const idx = currentDay.value.items.findIndex(i => i.id === editItem.value.id);
+        if (idx !== -1) currentDay.value.items.splice(idx, 1);
+        closeEdit(); showToast('已刪除');
+      }
+    };
+
+    const openExpense = (item) => { if (!item.expenses) item.expenses = []; expenseItem.value = item; newExpPayer.value = members.value[0]; showExpense.value = true; };
+    const closeExpense = () => { showExpense.value = false; saveData(); };
+    const addExp = () => {
+      if (!newExpLabel.value || !newExpAmount.value) return;
+      expenseItem.value.expenses.push({ label: newExpLabel.value, amount: newExpAmount.value, method: newExpMethod.value, payer: newExpPayer.value || members.value[0] });
+      newExpLabel.value = ''; newExpAmount.value = '';
+      saveData();
+    };
+    const removeExp = (idx) => { expenseItem.value.expenses.splice(idx, 1); saveData(); };
+
+    const addMember = () => {
+      if (newMember.value && !members.value.includes(newMember.value)) { members.value.push(newMember.value); newMember.value = ''; saveData(); }
+    };
+    const removeMember = (idx) => {
+      if (members.value.length > 1) { members.value.splice(idx, 1); saveData(); } else showToast('至少要有一位旅伴');
+    };
+
+    const uploadImg = (e) => {
+      const f = e.target.files[0]; if (!f) return;
+      const r = new FileReader();
+      r.onload = (ev) => {
+        const img = new Image(); img.onload = () => {
+          const c = document.createElement('canvas'), ctx = c.getContext('2d');
+          let w = img.width, h = img.height, max = 800;
+          if (w > max) { h = h * max / w; w = max; }
+          c.width = w; c.height = h; ctx.drawImage(img, 0, 0, w, h);
+          editItem.value.image = c.toDataURL('image/jpeg', 0.7); saveData();
+        }; img.src = ev.target.result;
+      }; r.readAsDataURL(f);
+    };
+
+    const uploadHeader = (e) => {
+      const f = e.target.files[0]; if (!f) return;
+      const r = new FileReader();
+      r.onload = (ev) => { headerImg.value = ev.target.result; saveData(); };
+      r.readAsDataURL(f);
+    };
+
+    const openUrl = (url) => window.open(url, '_blank');
+    const searchMap = (title) => window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(title)}`, '_blank');
+
+    const showToast = (msg) => {
+      toastMsg.value = msg; toastVisible.value = true;
+      setTimeout(() => { toastVisible.value = false; }, 2200);
+    };
+
+    const saveData = () => {
+      localStorage.setItem(STORE_KEY, JSON.stringify({
+        tripName: tripName.value, tripStartDate: tripStartDate.value, tripDays: tripDays.value,
+        members: members.value, currency: currency.value, headerImg: headerImg.value
+      }));
+    };
+
+    const loadData = () => {
+      try {
+        const raw = localStorage.getItem(STORE_KEY);
+        if (!raw) return false;
+        const d = JSON.parse(raw);
+        tripName.value = d.tripName || '我的旅程';
+        tripStartDate.value = d.tripStartDate || '';
+        tripDays.value = d.tripDays || [];
+        members.value = d.members || ['我'];
+        currency.value = d.currency || '¥';
+        if (d.headerImg) headerImg.value = d.headerImg;
+        return true;
+      } catch { return false; }
+    };
+
+    const exportTrip = () => {
+      const blob = new Blob([JSON.stringify({ tripName: tripName.value, tripStartDate: tripStartDate.value, tripDays: tripDays.value, members: members.value })], { type: 'application/json' });
+      const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+      a.download = `${tripName.value}.json`; a.click();
+      showToast('已匯出行程');
+    };
+
+    const triggerImport = () => importInput.value && importInput.value.click();
+
+    const importTrip = (e) => {
+      const f = e.target.files[0]; if (!f) return;
+      const r = new FileReader();
+      r.onload = (ev) => {
+        try {
+          const d = JSON.parse(ev.target.result);
+          tripName.value = d.tripName || '匯入行程';
+          tripStartDate.value = d.tripStartDate || '';
+          tripDays.value = d.tripDays || [];
+          if (d.members) members.value = d.members;
+          saveData(); showToast('匯入成功 ✓');
+          nextTick(() => initSortable());
+        } catch { showToast('檔案格式錯誤'); }
+      };
+      r.readAsText(f);
+    };
+
+    const fetchWeather = async (lat, lon) => {
+      if (!lat || !lon) return;
+      weatherLoading.value = true;
+      try {
+        const res = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true`);
+        const data = await res.json();
+        currentTemp.value = Math.round(data.current_weather.temperature);
+        weatherCode.value = data.current_weather.weathercode;
+      } catch { currentTemp.value = '--'; }
+      weatherLoading.value = false;
+    };
+
+    const generateAI = async () => {
+      if (!aiCity.value) { showToast('請輸入目的地'); return; }
+      if (!currentDay.value) { addDay(); }
+      aiLoading.value = true;
+      aiStatus.value = 'AI 思考中，請稍候...';
+
+      const prompt = `你是一位日本旅遊達人。請為以下需求規劃一天的行程，並以 JSON 格式回傳。
+
+目的地：${aiCity.value}
+風格偏好：${aiStyle.value || '綜合觀光'}
+特別需求：${aiExtra.value || '無'}
+
+請以這個 JSON 格式回傳（只回傳 JSON，不要有其他文字）：
+{
+  "title": "今日標題（例：京都古城漫遊）",
+  "city": "${aiCity.value}",
+  "lat": 緯度數字,
+  "lon": 經度數字,
+  "items": [
+    {
+      "timeValue": "09:00",
+      "title": "地點名稱（日文+中文）",
+      "type": "spot|lunch|dinner|shopping|shrine|transit|hotel|onsen|flexible 其中一個",
+      "desc": "簡短介紹，50字以內",
+      "mapUrl": "https://maps.google.com/... (可空字串)"
+    }
+  ]
+}
+
+行程要合理（考慮距離和時間），包含 6~10 個時間點，必須包含午餐和晚餐。`;
+
+      try {
+        const res = await fetch('https://api.anthropic.com/v1/messages', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model: 'claude-sonnet-4-20250514',
+            max_tokens: 1000,
+            messages: [{ role: 'user', content: prompt }]
+          })
+        });
+        const data = await res.json();
+        const text = data.content.map(c => c.text || '').join('');
+        const clean = text.replace(/```json|```/g, '').trim();
+        const parsed = JSON.parse(clean);
+
+        currentDay.value.title = parsed.title || currentDay.value.title;
+        currentDay.value.city = parsed.city;
+        currentDay.value.lat = parsed.lat;
+        currentDay.value.lon = parsed.lon;
+        currentDay.value.items = parsed.items.map((it, i) => ({
+          id: Date.now() + i, timeValue: it.timeValue, title: it.title,
+          type: it.type, desc: it.desc, mapUrl: it.mapUrl || '', links: [], expenses: [], image: ''
+        }));
+
+        if (parsed.lat && parsed.lon) fetchWeather(parsed.lat, parsed.lon);
+        saveData();
+        aiStatus.value = `✓ 已生成 ${currentDay.value.items.length} 個行程`;
+        showAiPanel.value = false;
+        showToast('AI 行程生成完成！');
+        nextTick(() => initSortable());
+      } catch (err) {
+        aiStatus.value = '生成失敗，請再試一次';
+        showToast('AI 生成失敗');
+      }
+      aiLoading.value = false;
+    };
+
+    let sortable = null;
+    const initSortable = () => {
+      const el = document.getElementById('item-list');
+      if (!el) return;
+      if (sortable) sortable.destroy();
+      sortable = Sortable.create(el, {
+        handle: '.drag-handle', animation: 150,
+        onEnd: (evt) => {
+          if (!currentDay.value) return;
+          const items = currentDay.value.items;
+          items.splice(evt.newIndex, 0, items.splice(evt.oldIndex, 1)[0]);
+          saveData();
+        }
+      });
+    };
+
+    onMounted(() => {
+      loadData();
+      setTimeout(() => {
+        document.getElementById('splash').classList.add('fade');
+        setTimeout(() => { document.getElementById('splash').style.display = 'none'; }, 700);
+      }, 1000);
+      nextTick(() => initSortable());
+
+      watch(currentDayIdx, () => nextTick(() => initSortable()));
+
+      if (currentDay.value && currentDay.value.lat) fetchWeather(currentDay.value.lat, currentDay.value.lon);
+    });
+
+    return {
+      tripName, tripStartDate, tripDays, currentDayIdx, currentDay, members, newMember, currency,
+      headerImg, headerPresets, showAiPanel, showEdit, showExpense, showMemberModal, showSettings,
+      editItem, expenseItem, aiCity, aiStyle, aiExtra, aiLoading, aiStatus,
+      weatherLoading, currentTemp, weatherIcon, toastVisible, toastMsg,
+      newExpLabel, newExpAmount, newExpMethod, newExpPayer, importInput,
+      dailyTotal, tripTotal, splitResult,
+      formatTabDate, typeClass, typeName, itemTotal,
+      addDay, setDayCount, rebuildDates, changeDay, addItem, openEdit, closeEdit, deleteItem,
+      openExpense, closeExpense, addExp, removeExp, addMember, removeMember,
+      uploadImg, uploadHeader, openUrl, searchMap, exportTrip, triggerImport, importTrip,
+      generateAI, saveData, showToast
+    };
+  }
+}).mount('#app');
+</script>
+</body>
+</html>
