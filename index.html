@@ -500,15 +500,16 @@ textarea.field-input { resize: vertical; height: 72px; }
         <span style="font-size:0.7rem;color:var(--gray);font-family:'Noto Sans TC';">AI 行程功能需要</span>
       </div>
       <div style="background:rgba(0,0,0,0.03);border-radius:8px;padding:12px;margin-bottom:16px;font-size:0.78rem;color:var(--gray);line-height:1.7;">
-        <b style="color:var(--ink);">如何取得免費 API Key：</b><br>
-        1. 前往 <a href="https://console.anthropic.com" target="_blank" style="color:#2563eb;">console.anthropic.com</a><br>
-        2. 註冊 / 登入帳號<br>
-        3. 左側選 API Keys → Create Key<br>
-        4. 複製 sk-ant-... 開頭的字串貼下方<br>
+        <b style="color:var(--ink);">如何取得免費 Gemini API Key：</b><br>
+        1. 前往 <a href="https://aistudio.google.com" target="_blank" style="color:#2563eb;">aistudio.google.com</a><br>
+        2. 用 Google 帳號登入<br>
+        3. 右上角點「Get API Key」→「Create API Key」<br>
+        4. 複製 AIzaSy... 開頭的字串貼下方<br>
+        <span style="color:#16a34a;">✓ 完全免費，每分鐘可呼叫 15 次</span><br>
         <span style="color:#dc2626;">Key 儲存在你的瀏覽器，不會上傳到任何地方</span>
       </div>
-      <div class="field-label">你的 API Key</div>
-      <input :value="apiKey" @input="apiKey=$event.target.value" class="field-input" placeholder="sk-ant-api03-..." type="password" style="font-family:monospace;font-size:0.85rem;">
+      <div class="field-label">你的 Gemini API Key</div>
+      <input :value="apiKey" @input="apiKey=$event.target.value" class="field-input" placeholder="AIzaSy..." type="password" style="font-family:monospace;font-size:0.85rem;">
       <button class="btn-save" @click="saveApiKey(apiKey)">儲存並使用</button>
       <button v-if="apiKey" @click="saveApiKey('');apiKey=''" style="width:100%;margin-top:8px;padding:10px;border:1px solid #fca5a5;background:none;color:#dc2626;border-radius:6px;cursor:pointer;font-size:0.85rem;">清除 Key</button>
     </div>
@@ -817,22 +818,17 @@ createApp({
 行程要合理（考慮距離和時間），包含 6~10 個時間點，必須包含午餐和晚餐。`;
 
       try {
-        const res = await fetch('https://api.anthropic.com/v1/messages', {
+        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey.value}`, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-api-key': apiKey.value,
-            'anthropic-version': '2023-06-01',
-            'anthropic-dangerous-direct-browser-access': 'true'
-          },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            model: 'claude-sonnet-4-6',
-            max_tokens: 1000,
-            messages: [{ role: 'user', content: prompt }]
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: { temperature: 0.7, maxOutputTokens: 1500 }
           })
         });
         const data = await res.json();
-        const text = data.content.map(c => c.text || '').join('');
+        if (data.error) throw new Error(data.error.message);
+        const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
         const clean = text.replace(/```json|```/g, '').trim();
         const parsed = JSON.parse(clean);
 
