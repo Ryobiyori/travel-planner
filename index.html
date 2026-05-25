@@ -207,6 +207,7 @@ textarea.field-input { resize: vertical; height: 72px; }
         <input v-model="tripName" class="trip-name-input serif" placeholder="我的旅程名稱">
         <button @click="showSettings=true" style="background:none;border:none;cursor:pointer;color:var(--gold);font-size:1.1rem;padding:4px;"><i class="fa-solid fa-sliders"></i></button>
         <button @click="showMemberModal=true" style="background:none;border:none;cursor:pointer;color:var(--gray);font-size:1rem;padding:4px;"><i class="fa-solid fa-users"></i></button>
+        <button @click="showApiModal=true" :style="apiKey ? 'background:none;border:none;cursor:pointer;color:#16a34a;font-size:1rem;padding:4px;' : 'background:none;border:none;cursor:pointer;color:#dc2626;font-size:1rem;padding:4px;'" :title="apiKey ? 'API Key 已設定' : '尚未設定 API Key'"><i class="fa-solid fa-key"></i></button>
       </div>
       <div class="header-meta">
         <span>{{ tripStartDate || '設定出發日期' }}</span>
@@ -491,6 +492,28 @@ textarea.field-input { resize: vertical; height: 72px; }
       <button class="btn-save" @click="showSettings=false;saveData()">儲存設定</button>
     </div>
   </div>
+  <!-- API KEY MODAL -->
+  <div class="overlay" v-if="showApiModal" @click="showApiModal=false">
+    <div class="modal" @click.stop>
+      <div class="modal-handle"></div>
+      <div class="modal-title serif">設定 API Key
+        <span style="font-size:0.7rem;color:var(--gray);font-family:'Noto Sans TC';">AI 行程功能需要</span>
+      </div>
+      <div style="background:rgba(0,0,0,0.03);border-radius:8px;padding:12px;margin-bottom:16px;font-size:0.78rem;color:var(--gray);line-height:1.7;">
+        <b style="color:var(--ink);">如何取得免費 API Key：</b><br>
+        1. 前往 <a href="https://console.anthropic.com" target="_blank" style="color:#2563eb;">console.anthropic.com</a><br>
+        2. 註冊 / 登入帳號<br>
+        3. 左側選 API Keys → Create Key<br>
+        4. 複製 sk-ant-... 開頭的字串貼下方<br>
+        <span style="color:#dc2626;">Key 儲存在你的瀏覽器，不會上傳到任何地方</span>
+      </div>
+      <div class="field-label">你的 API Key</div>
+      <input :value="apiKey" @input="apiKey=$event.target.value" class="field-input" placeholder="sk-ant-api03-..." type="password" style="font-family:monospace;font-size:0.85rem;">
+      <button class="btn-save" @click="saveApiKey(apiKey)">儲存並使用</button>
+      <button v-if="apiKey" @click="saveApiKey('');apiKey=''" style="width:100%;margin-top:8px;padding:10px;border:1px solid #fca5a5;background:none;color:#dc2626;border-radius:6px;cursor:pointer;font-size:0.85rem;">清除 Key</button>
+    </div>
+  </div>
+
 </div>
 
 <script>
@@ -516,6 +539,8 @@ createApp({
       'https://images.unsplash.com/photo-1536098561742-ca998e48cbcc?q=80&w=400',
     ];
 
+    const apiKey = ref(localStorage.getItem('ryoko_apikey') || '');
+    const showApiModal = ref(false);
     const showAiPanel = ref(false);
     const showEdit = ref(false);
     const showExpense = ref(false);
@@ -752,8 +777,16 @@ createApp({
       weatherLoading.value = false;
     };
 
+    const saveApiKey = (key) => {
+      apiKey.value = key.trim();
+      localStorage.setItem('ryoko_apikey', apiKey.value);
+      showApiModal.value = false;
+      showToast('API Key 已儲存 ✓');
+    };
+
     const generateAI = async () => {
       if (!aiCity.value) { showToast('請輸入目的地'); return; }
+      if (!apiKey.value) { showApiModal.value = true; return; }
       if (!currentDay.value) { addDay(); }
       aiLoading.value = true;
       aiStatus.value = 'AI 思考中，請稍候...';
@@ -786,9 +819,14 @@ createApp({
       try {
         const res = await fetch('https://api.anthropic.com/v1/messages', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': apiKey.value,
+            'anthropic-version': '2023-06-01',
+            'anthropic-dangerous-direct-browser-access': 'true'
+          },
           body: JSON.stringify({
-            model: 'claude-sonnet-4-20250514',
+            model: 'claude-sonnet-4-6',
             max_tokens: 1000,
             messages: [{ role: 'user', content: prompt }]
           })
@@ -855,12 +893,12 @@ createApp({
       editItem, expenseItem, aiCity, aiStyle, aiExtra, aiLoading, aiStatus,
       weatherLoading, currentTemp, weatherIcon, toastVisible, toastMsg,
       newExpLabel, newExpAmount, newExpMethod, newExpPayer, importInput,
-      dailyTotal, tripTotal, splitResult,
+      dailyTotal, tripTotal, splitResult, apiKey, showApiModal,
       formatTabDate, typeClass, typeName, itemTotal,
       addDay, setDayCount, rebuildDates, changeDay, addItem, openEdit, closeEdit, deleteItem,
       openExpense, closeExpense, addExp, removeExp, addMember, removeMember,
       uploadImg, uploadHeader, openUrl, searchMap, exportTrip, triggerImport, importTrip,
-      generateAI, saveData, showToast
+      generateAI, saveApiKey, saveData, showToast
     };
   }
 }).mount('#app');
