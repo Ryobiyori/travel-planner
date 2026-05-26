@@ -263,7 +263,10 @@ textarea.field-input { resize: vertical; height: 72px; }
       <i class="fa-solid fa-robot"></i>
       {{ aiLoading ? 'AI 生成中...' : '生成今日行程' }}
     </button>
-    <div class="ai-status" :class="{ loading: aiLoading }">{{ aiStatus }}</div>
+    <div v-if="!apiKey" style="margin-top:8px;text-align:center;font-size:0.75rem;color:#dc2626;">
+      ⚠️ 請先點右上角 🔑 設定 Gemini API Key
+    </div>
+    <div class="ai-status" :class="{ loading: aiLoading }" :style="aiStatus.startsWith('❌') ? 'color:#dc2626;font-weight:700;' : ''">{{ aiStatus }}</div>
   </div>
 
   <!-- DAY CONTENT -->
@@ -848,8 +851,19 @@ createApp({
         showToast('AI 行程生成完成！');
         nextTick(() => initSortable());
       } catch (err) {
-        aiStatus.value = '生成失敗，請再試一次';
-        showToast('AI 生成失敗');
+        console.error('AI Error:', err);
+        const msg = err.message || '未知錯誤';
+        if (msg.includes('API_KEY') || msg.includes('api key') || msg.includes('API key')) {
+          aiStatus.value = '❌ API Key 無效，請重新設定';
+          showApiModal.value = true;
+        } else if (msg.includes('CORS') || msg.includes('fetch')) {
+          aiStatus.value = '❌ 網路連線問題，請確認網路後再試';
+        } else if (msg.includes('quota') || msg.includes('QUOTA')) {
+          aiStatus.value = '❌ 免費額度用完，明天再試';
+        } else {
+          aiStatus.value = '❌ ' + msg.substring(0, 60);
+        }
+        showToast('生成失敗：' + msg.substring(0, 30));
       }
       aiLoading.value = false;
     };
